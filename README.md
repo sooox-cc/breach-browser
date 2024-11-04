@@ -2,7 +2,7 @@
 
 A fast and efficient full-text search engine for large text datasets with a clean web interface. Built with Python, Elasticsearch, and Flask.
 
-![Preview](https://github.com/sooox-cc/breach-browser/blob/main/Screenshot_20241104_190348.png?raw=true)
+![Preview](https://github.com/sooox-cc/breach-browser/blob/main/preview.png?raw=true)
 
 ## Features
 
