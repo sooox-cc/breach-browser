@@ -9,10 +9,10 @@ A fast and efficient full-text search engine for large text datasets with a clea
 - 🔍 Full-text search with advanced query syntax
 - ⚡ Efficient chunking of large files
 - 📊 Detailed search results with file metadata
-- 🔧 Configurable results per page
-- 💾 Progress tracking for large indexing operations
+- 🔧 Progressive loading for faster search results
+- 💾 Resume-capable indexing with progress tracking
 - 📝 Search highlighting with context
-- 📈 Real-time search statistics
+- 📈 Real-time indexing statistics
 
 ## Requirements
 
