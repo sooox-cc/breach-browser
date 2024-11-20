@@ -393,6 +393,14 @@ body {
 .text-muted {
     color: var(--muted-text) !important;
 }
+
+.footer {
+    border-top: 1px solid var(--card-border);
+}
+.footer a:hover {
+    color: var(--primary-color) !important;
+    text-decoration: none;
+}
 """)
 
 # Update the HTML template with dark mode toggle
@@ -469,6 +477,16 @@ with open('templates/index.html', 'w') as f:
                 </div>
             </div>
         </div>
+        <div class="footer mt-5 py-3 text-center text-muted">
+            <small>
+                Made with ❤️ by 
+                <a href="https://sooox.cc/" target="_blank" class="text-muted">sooox</a>
+                 | 
+                <a href="https://github.com/sooox-cc/breach-browser" target="_blank" class="text-muted">
+                    <i class="bi bi-github"> </i>GitHub
+                </a>
+            </small>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -496,33 +514,47 @@ with open('templates/index.html', 'w') as f:
                       .replace(/data:/gi, '');
         }
 
-        function search() {
+        let currentFrom = 0;
+        let isSearching = false;
+
+        function search(append = false) {
+            if (!append) {
+                currentFrom = 0;
+                document.getElementById('results').innerHTML = '';
+            }
+            
+            if (isSearching) return;
+            isSearching = true;
+            
             const query = document.getElementById('searchInput').value;
             const size = document.getElementById('size').value;
             const results = document.getElementById('results');
             const stats = document.getElementById('stats');
             
-            results.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+            if (!append) {
+                stats.innerHTML = 'Searching...';
+            }
             
             fetch('/search', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     query: query,
-                    size: size
-                }),
+                    size: size,
+                    from: currentFrom
+                })
             })
             .then(response => response.json())
             .then(data => {
-                results.innerHTML = '';
-                stats.innerHTML = `Found ${data.total} results in ${data.time}ms`;
-                
+                if (data.error) throw new Error(data.error);
+
+                if (!append) {
+                    results.innerHTML = '';
+                }
+
                 data.hits.forEach(hit => {
                     const resultDiv = document.createElement('div');
                     resultDiv.className = 'result-item card mb-3';
-                    
                     let highlights = '';
                     if (hit.highlights) {
                         highlights = hit.highlights.map(h => {
@@ -551,18 +583,24 @@ with open('templates/index.html', 'w') as f:
                     
                     results.appendChild(resultDiv);
                 });
+
+                stats.innerHTML = `Found ${data.total} results in ${data.time}ms`;
+                currentFrom += parseInt(size);
+                isSearching = false;
                 
-                if (data.hits.length === 0) {
-                    results.innerHTML = '<div class="alert alert-info">No results found</div>';
+                if (data.has_more) {
+                    setTimeout(() => search(true), 100);
                 }
             })
             .catch(error => {
-                results.innerHTML = '<div class="alert alert-danger">An error occurred while searching</div>';
+                if (!append) {
+                    results.innerHTML = '<div class="alert alert-danger">An error occurred while searching</div>';
+                }
+                isSearching = false;
                 console.error('Error:', error);
             });
         }
 
-        // Add to existing JavaScript
         function checkIndexingStatus() {
             fetch('/indexing-status')
                 .then(response => response.json())
@@ -610,6 +648,7 @@ def search():
     data = request.get_json()
     query = data.get('query', '')
     size = int(data.get('size', 10))
+    from_pos = int(data.get('from', 0))
     
     search_query = {
         "query": {
@@ -634,22 +673,22 @@ def search():
             },
             "boundary_max_scan": 50
         },
-        "_source": ["filename", "filepath", "chunk_number", "total_chunks", "file_size"]
+        "_source": ["filename", "filepath", "chunk_number", "total_chunks", "file_size"],
+        "from": from_pos,
+        "size": size
     }
     
     try:
         start_time = time.time()
-        response = es.search(index="text_documents", body=search_query, size=size)
+        response = es.search(index="text_documents", body=search_query)
         search_time = int((time.time() - start_time) * 1000)
         
         hits = []
         for hit in response['hits']['hits']:
-            # Process highlights to clean up the display
             highlights = hit.get('highlight', {}).get('content', [])
             cleaned_highlights = []
             
             for highlight in highlights:
-                # Split by newlines and only keep lines containing highlighted terms
                 lines = highlight.split('\n')
                 relevant_lines = [line.strip() for line in lines if '<em>' in line]
                 if relevant_lines:
@@ -666,10 +705,12 @@ def search():
             }
             hits.append(result)
         
+        total_hits = response['hits']['total']['value']
         return jsonify({
             'hits': hits,
-            'total': response['hits']['total']['value'],
-            'time': search_time
+            'total': total_hits,
+            'time': search_time,
+            'has_more': (from_pos + size) < total_hits
         })
         
     except Exception as e:
